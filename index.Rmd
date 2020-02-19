@@ -1,0 +1,108 @@
+---
+title: "Computational musicology"
+author: "Danielle Jong"
+date:   'February--March 2020'
+output: 
+    flexdashboard::flex_dashboard:
+        storyboard: true
+        theme: cerulean
+---
+
+```{r setup}
+# In order to use these packages, we need to install flexdashboard, plotly, and Cairo.
+library(tidyverse)
+library(plotly)
+library(spotifyr)
+source('spotify.R')
+```
+
+### What is a 'happy' playlist? (week 6)
+
+What I would like to examine is ‘What does it mean to be a ‘happy’ playlist?’ or ‘What makes a playlist ‘happy’ if you compare it to playlists with negative emotions in the title?’
+
+What I am going to do is comparing playlists with ‘happy’ in the title to playlists that have opposite emotions in the title (e.g. sad). My corpus consist out of three playlists with the ‘happy’ in the title. Two playlists exist out of 100 songs and the other one out of 80. The other part of the corpus exist out of two playlists (‘Life sucks’ and ‘Sad songs’) which contain 100 and 60 songs. So the corpus represents playlists that are meant to be ‘happy’ and playlists that are not meant to be ‘happy’. The label ‘happy’ is chosen by Spotify so it represents that label well, but the other playlists are chosen by me and I feel like these playlists are the opposite of ‘happy’, but since it is not chosen by Spotify it might be that these labels overlap or are not related at all. 
+
+
+***
+
+There seems to be a significantly difference in energy for ‘happy’ playlists and the other Playlists. The happy playlists are more energetic than the other ones (M= .66, SD= .14). The energy level of the other playlists is rather low (M= .31, SD= .14). This seems to be a promising feature for identifying differences between 'Happy'playlists and playlists that are not. Other promising features are:
+
+There’s a significantly difference in valence between the ‘happy’ playlists and the others. The ‘happy’ playlists have a much higher valence (M= .54, SD= .18). The valence for ‘Sad songs’ and ‘Life sucks’ is very low (M= .28, SD= .13).
+
+The mean for the dancebility of the sad songs is at least 0.64 and the other playlists are lower (both 0.51). So ‘happy’ playlists have a higher danceability, but the difference is small. 
+
+What is remarkable is that there doesn’t really seem to be a difference in the mode. They are all mostly major. I expected there to be a difference. The happy songs (M= .66, SD= .48) in major and the other playlists (M= .78, SD= .42) in minor, but that is'nt the case.
+
+There aren't any extremes or outliers in my corpus, so I do not have to think about including or excluding any of them.
+
+
+### Happy playlists are more energetic than opposite playlists (week 7)
+
+```{r}
+happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')
+happy_hits <- get_playlist_audio_features('spotify', '37i9dQZF1DXdPec7aLTmlC')
+happy_pop<- get_playlist_audio_features('spotify', '37i9dQZF1DX1H4LbvY4OJi')
+life_sucks<- get_playlist_audio_features('spotify', '37i9dQZF1DX3YSRoSdA634')
+sad_songs<- get_playlist_audio_features('spotify','37i9dQZF1DX7qK8ma5wgG1')
+
+happy_playlists <-
+  happy_tunes %>% mutate(playlist = "Happy Tunes") %>%
+  bind_rows(happy_hits %>% mutate(playlist = "Happy hits"))%>%
+  bind_rows(happy_pop %>% mutate(playlist = "Happy pop"))
+
+opposite_playlists <-
+  life_sucks %>% mutate(playlist = "Life sucks") %>%
+  bind_rows(sad_songs %>% mutate(playlist = "Sad songs"))
+
+Happy_Sad <-
+  happy_playlists %>% mutate(playlist = "Happy playlists") %>%
+  bind_rows(opposite_playlists %>% mutate(playlist = "Opposite playlists"))
+
+Happy_Sad %>%                       # Start with awards.
+  mutate(
+    mode = ifelse(mode == 0, 'Minor', 'Major')
+  ) %>%
+  ggplot(                      # Set up the plot.
+    aes(
+      x = valence,
+      y = energy,
+      size = liveness,
+      colour = mode
+    )
+  ) +
+  geom_point() +               # Scatter plot.
+  facet_wrap(~ playlist) +     # Separate charts per playlist.
+  scale_x_continuous(          # Fine-tune the x axis.
+    limits = c(0, 1),
+    breaks = c(0, 0.50, 1),  # Use grid-lines for quadrants only.
+    minor_breaks = NULL      # Remove 'minor' grid-lines.
+  ) +
+  scale_y_continuous(          # Fine-tune the y axis in the same way.
+    limits = c(0, 1),
+    breaks = c(0, 0.25, 0.50,0.75, 1),
+    minor_breaks = NULL
+  ) +
+  scale_colour_brewer(         # Use the Color Brewer to choose a palette.
+    type = "qual",           # Qualitative set.
+    palette = "Paired"       # Name of the palette is 'Paired'.
+  ) +
+  scale_size_continuous(       # Fine-tune the sizes of each point.
+    trans = "exp",           # Use an exp transformation to emphasise loud.
+    guide = "none"           # Remove the legend for size.
+  ) +
+  theme_light() +              # Use a simpler them.
+  labs(                        # Make the titles nice.
+    x = "Valence",
+    y = "Energy",
+    colour = "Mode"
+  )+
+  ggtitle('Valence, energy, liveness and mode')
+
+
+```
+
+***
+
+This plot is about the valence, energy, liveness and mode of the two kinds of playlists. It is based on the plot of Dr John Ashley Burgoyne that was showed in class. I wanted to use different colors from the same package, but I don't know yet how to do that.The plot shows that the valence and energy for most songs in the happy playlists are high, while for the other kind of playlists the valence and energy are low. This is the same pattern as I already saw last week. Another pattern that I saw last week is that there isn't really a difference in the mode of both kind of playlists. What also can be seen in the graph is that 'Happy songs' tend to have a higher liveness, then songs in the other playlists. When I checked this audio feature last week I didn't see that there is such a difference between the playlists(M=.18, SD=.14 for 'Happy' and M=.13, SD=.06). This is something I didn't expect to find, so I would like to investigate this further in the coming weeks.    
+
+Last week I thought there were'nt any outliers, but there seem to be some. I don't think they will effect the results, because there are many songs that aren't outliers. So I won't take the outliers out.
