@@ -58,7 +58,7 @@ Happy_Sad <-
   happy_playlists %>% mutate(playlist = "Happy playlists") %>%
   bind_rows(opposite_playlists %>% mutate(playlist = "Opposite playlists"))
 
-Happy_Sad %>%                       # Start with awards.
+playslists_plot <- Happy_Sad %>%                       # Start with awards.
   mutate(
     mode = ifelse(mode == 0, 'Minor', 'Major')
   ) %>%
@@ -98,7 +98,7 @@ Happy_Sad %>%                       # Start with awards.
   )+
   ggtitle('Valence, energy, liveness and mode')
 
-
+ggplotly(playslists_plot)
 ```
 
 ***
