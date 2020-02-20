@@ -106,3 +106,26 @@ ggplotly(playslists_plot)
 This plot is about the valence, energy, liveness and mode of the two kinds of playlists. It is based on the plot of Dr John Ashley Burgoyne that was showed in class. I wanted to use different colors from the same package, but I don't know yet how to do that.The plot shows that the valence and energy for most songs in the happy playlists are high, while for the other kind of playlists the valence and energy are low. This is the same pattern as I already saw last week. Another pattern that I saw last week is that there isn't really a difference in the mode of both kind of playlists. What also can be seen in the graph is that 'Happy songs' tend to have a higher liveness, then songs in the other playlists. When I checked this audio feature last week I didn't see that there is such a difference between the playlists(M=.18, SD=.14 for 'Happy' and M=.13, SD=.06). This is something I didn't expect to find, so I would like to investigate this further in the coming weeks.    
 
 Last week I thought there were'nt any outliers, but there seem to be some. I don't think they will effect the results, because there are many songs that aren't outliers. So I won't take the outliers out.
+
+### Most Happy songs are in C or C sharp (week 8)
+
+```{r}
+ggplotly(ggplot(Happy_Sad, aes(x=key))+
+  geom_bar(fill='lightpink', color='pink1')+
+  facet_wrap(~playlist)+
+  theme_minimal())
+
+ ggplotly(ggplot(happy_playlists, aes(x=key))+
+    geom_bar(fill='lightcoral', color='indianred2')+
+    facet_wrap(~playlist)+
+  theme_minimal())
+  
+  ggplotly(ggplot(opposite_playlists, aes(x=key))+
+    geom_bar(fill='hotpink4', color='deeppink4')+
+    facet_wrap(~playlist)+
+  theme_minimal())
+  ```
+ 
+   ***
+  
+  
