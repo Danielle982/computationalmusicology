@@ -24,6 +24,21 @@ Happy_Sad <-
   happy_playlists %>% mutate(playlist = "Happy playlists") %>%
   bind_rows(opposite_playlists %>% mutate(playlist = "Opposite playlists"))
 
+ggplot(Happy_Sad, aes(x=key))+
+  geom_bar(fill='lightpink', color='pink1')+
+  facet_wrap(~playlist)+
+  theme_minimal()
+
+  ggplot(happy_playlists, aes(x=key))+
+    geom_bar(fill='lightcoral', color='indianred2')+
+    facet_wrap(~playlist)+
+  theme_minimal()
+  
+  ggplot(opposite_playlists, aes(x=key))+
+    geom_bar(fill='hotpink4', color='deeppink4')+
+    facet_wrap(~playlist)+
+  theme_minimal()
+  
 ggplot(happy_tunes, aes(x=key))+
   geom_bar(fill='lightpink')+
   theme_classic()
