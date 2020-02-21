@@ -25,34 +25,41 @@ Happy_Sad <-
   bind_rows(opposite_playlists %>% mutate(playlist = "Opposite playlists"))
 
 ggplot(Happy_Sad, aes(x=key))+
+  scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
   geom_bar(fill='lightpink', color='pink1')+
   facet_wrap(~playlist)+
-  theme_minimal()
+  theme_minimal() 
 
   ggplot(happy_playlists, aes(x=key))+
+    scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
     geom_bar(fill='lightcoral', color='indianred2')+
     facet_wrap(~playlist)+
   theme_minimal()
   
   ggplot(opposite_playlists, aes(x=key))+
+    scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
     geom_bar(fill='hotpink4', color='deeppink4')+
     facet_wrap(~playlist)+
   theme_minimal()
   
 ggplot(happy_tunes, aes(x=key))+
+  scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
   geom_bar(fill='lightpink')+
   theme_classic()
 
 
 ggplot(happy_pop, aes(x=key))+
+  scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
   geom_bar(fill='lightcoral')+
   theme_classic()
 
 
 ggplot(happy_hits, aes(x=key))+
+  scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
   geom_bar(fill='lightpink3')+
   theme_classic()
 
 ggplot(happy_playlists, aes(x=key))+
+  scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
   geom_bar()+
   theme_classic()

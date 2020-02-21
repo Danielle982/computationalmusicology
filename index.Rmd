@@ -18,12 +18,16 @@ source('spotify.R')
 
 ### What is a 'happy' playlist? (week 6)
 
+**Introduction**
+
 What I would like to examine is ‘What does it mean to be a ‘happy’ playlist?’ or ‘What makes a playlist ‘happy’ if you compare it to playlists with negative emotions in the title?’
 
 What I am going to do is comparing playlists with ‘happy’ in the title to playlists that have opposite emotions in the title (e.g. sad). My corpus consist out of three playlists with the ‘happy’ in the title. Two playlists exist out of 100 songs and the other one out of 80. The other part of the corpus exist out of two playlists (‘Life sucks’ and ‘Sad songs’) which contain 100 and 60 songs. So the corpus represents playlists that are meant to be ‘happy’ and playlists that are not meant to be ‘happy’. The label ‘happy’ is chosen by Spotify so it represents that label well, but the other playlists are chosen by me and I feel like these playlists are the opposite of ‘happy’, but since it is not chosen by Spotify it might be that these labels overlap or are not related at all. 
 
 
 ***
+
+**First findings**
 
 There seems to be a significantly difference in energy for ‘happy’ playlists and the other Playlists. The happy playlists are more energetic than the other ones (M= .66, SD= .14). The energy level of the other playlists is rather low (M= .31, SD= .14). This seems to be a promising feature for identifying differences between 'Happy'playlists and playlists that are not. Other promising features are:
 
@@ -46,7 +50,7 @@ life_sucks<- get_playlist_audio_features('spotify', '37i9dQZF1DX3YSRoSdA634')
 sad_songs<- get_playlist_audio_features('spotify','37i9dQZF1DX7qK8ma5wgG1')
 
 happy_playlists <-
-  happy_tunes %>% mutate(playlist = "Happy Tunes") %>%
+  happy_tunes %>% mutate(playlist = "Happy tunes") %>%
   bind_rows(happy_hits %>% mutate(playlist = "Happy hits"))%>%
   bind_rows(happy_pop %>% mutate(playlist = "Happy pop"))
 
@@ -103,29 +107,58 @@ ggplotly(playslists_plot)
 
 ***
 
+**Findings**
+
 This plot is about the valence, energy, liveness and mode of the two kinds of playlists. It is based on the plot of Dr John Ashley Burgoyne that was showed in class. I wanted to use different colors from the same package, but I don't know yet how to do that.The plot shows that the valence and energy for most songs in the happy playlists are high, while for the other kind of playlists the valence and energy are low. This is the same pattern as I already saw last week. Another pattern that I saw last week is that there isn't really a difference in the mode of both kind of playlists. What also can be seen in the graph is that 'Happy songs' tend to have a higher liveness, then songs in the other playlists. When I checked this audio feature last week I didn't see that there is such a difference between the playlists(M=.18, SD=.14 for 'Happy' and M=.13, SD=.06). This is something I didn't expect to find, so I would like to investigate this further in the coming weeks.    
 
 Last week I thought there were'nt any outliers, but there seem to be some. I don't think they will effect the results, because there are many songs that aren't outliers. So I won't take the outliers out.
 
-### Most Happy songs are in C or C sharp (week 8)
+### Most Happy songs are in C (week 8)
 
 ```{r}
-ggplotly(ggplot(Happy_Sad, aes(x=key))+
+ggplot(Happy_Sad, aes(x=key))+
+  scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
   geom_bar(fill='lightpink', color='pink1')+
   facet_wrap(~playlist)+
-  theme_minimal())
-
- ggplotly(ggplot(happy_playlists, aes(x=key))+
+  theme_minimal()+
+    ggtitle('Happy playlists vs. Opposite playlists') 
+  ggplot(happy_playlists, aes(x=key))+
+    scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
     geom_bar(fill='lightcoral', color='indianred2')+
     facet_wrap(~playlist)+
-  theme_minimal())
+  theme_minimal()+
+    ggtitle('The different happy playlists')
   
-  ggplotly(ggplot(opposite_playlists, aes(x=key))+
+  ggplot(opposite_playlists, aes(x=key))+
+    scale_x_continuous(breaks=0:11, labels = c("c", "c#", "d", "d#", "e", "f", "f#", "g", "g#", "a", "a#", "b"))+
     geom_bar(fill='hotpink4', color='deeppink4')+
     facet_wrap(~playlist)+
-  theme_minimal())
+  theme_minimal()+
+    ggtitle('The diffent opposite playlists')
   ```
  
    ***
+
+**Findings**
+    
+In this part I added three graphs that are about the playlists. The first graphs you can see are about the difference between 'happy playlists' and the other kinds of playlists. There you can see that most songs are in c or c sharp. That is to be expected since c is a 'basic' key in music theory. What is remarkable is that the distribution in the middle section of the 'happy playlists' barchart is very high. There aren't really any big differences in mode, while as you look at the barchart of the opposite playlists you see that not everything is (almost) the same. There is more variety in there, but this also doesn't show a very big difference. 
+
+When we take a closer look at the different kinds of 'happy playslist' we see there are three different distributions for every playlist, but they do show some similarities. For example Happy pop and Happy tunes don't have a lot of songs in d sharp, but do have a lot of songs in b and f sharp. When we compare Happy pop to Happy hits their shape is almost the same, but Happy hits contains a lot more song in g than does Happy pop.That they look so much the same might be due to that they contain the same (kind of) songs, but that is something I want to look at in the future weeks. Something that also can be seen in all of these graphs is that all the playlists contain a lot of songs in c. That is the same as we saw earlier when comparing all the Happy playlists to all the other playlists.
+
+Now take a look at the third set of graphs that compare 'Life sucks' to 'Sad songs'. Again most songs are in c, but what we can see now as well is that 'Sad songs' contains a lot of songs in every key, only the c stands out, but not as much as in the other graphs. From this graph we can conclude that sad songs are written in any key, but we must look at more playlists that are 'sad' to conclude it for the label of 'sad' that spotify uses. When we look at 'Life sucks' we see a graph that is comparable to the happy playlists. C stands out again and there also aren't much songs in d sharp, just as the 'Happy pop' and 'Happy tunes' playlists. When we look at the middle section, the amount of songs per key is almost the same, but higher than for most keys in the last section. The last section shows the same pattern, but with less songs per key. 
+
+Overall, we can conclude that all playlists are mostly in c and that d sharp is not used often in these playlists. We can also conclude that there doesn't really seem to be a difference in mode per kind of playlist. So what makes a 'Happy playlist' happy doesn't lie in the key that is used.
   
-  
+### What to find out for the coming weeks
+
+* Learn how to change the colors in the graph of week 7.
+
+* Incorporate ggplotly in my graphs from week 8 without showing only the first graphics.
+
+*  Investigate the 'liveness' of happy songs according to the findings of week 7.
+
+* Look at the different (kind of) songs that are used in the 'Happy pop' and 'Happy hits' playlists to see if they overlap in some kind of way.
+
+* Learn how to add song titles to the ggplotly function.
+
+* Make my dashboard more user friendly (e.g. adjusting the chart sizes and make several graphs on a tab more accesible).
