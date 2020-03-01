@@ -1,6 +1,9 @@
 library(tidyverse)
 library(spotifyr)
 
+Sys.setenv(SPOTIFY_CLIENT_ID = '3acf5bc3d46145ecb9873e98d17351fb')
+Sys.setenv(SPOTIFY_CLIENT_SECRET = '9bd775622ebe43db91f9a040ba5bf9c3')
+
 happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')
 happy_hits <- get_playlist_audio_features('spotify', '37i9dQZF1DXdPec7aLTmlC')
 happy_pop<- get_playlist_audio_features('spotify', '37i9dQZF1DX1H4LbvY4OJi')
@@ -29,7 +32,8 @@ Happy_Sad %>%                       # Start with awards.
       x = valence,
       y = energy,
       size = liveness,
-      colour = mode
+      colour = mode,
+      label=track.name
     )
   ) +
   geom_point() +               # Scatter plot.

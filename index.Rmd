@@ -9,12 +9,164 @@ output:
 ---
 
 ```{r setup}
-# In order to use these packages, we need to install flexdashboard, plotly, and Cairo.
 library(tidyverse)
 library(plotly)
 library(spotifyr)
+library(compmus)
 source('spotify.R')
 ```
+
+### Sweet Caroline Cepstrogram (week 9)
+
+```{r}
+sweet_caroline <- 
+    get_tidy_audio_analysis('3298yRJKPcCndQdNiTZKIo') %>% 
+    compmus_align(beats, segments) %>% 
+    select(beats) %>% unnest(beats) %>% 
+    mutate(
+        pitches = 
+            map(segments, 
+                compmus_summarise, pitches, 
+                method = 'mean', norm = 'euclidean')) %>% 
+    mutate(
+        timbre = 
+            map(segments, 
+                compmus_summarise, timbre, 
+                method = 'mean', norm= 'euclidean'))
+
+sweet_caroline %>% 
+    compmus_gather_timbre %>% 
+    ggplot(
+        aes(
+            x = start + duration / 2, 
+            width = duration, 
+            y = basis, 
+            fill = value)) + 
+    geom_tile() +
+    labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+    scale_fill_viridis_c(option = 'C') +
+    theme_classic()+
+  ggtitle ('Sweet Caroline timbre')
+```
+
+***
+
+**Findings**
+
+This plot shows the timbre of 'Sweet Caroline', which is an outlier in the plot of week 7. As we can see it has almost an aba'ba''b structure. This is what you might expect when looking at popmusic. Since a lot of popsongs are structured like this.So this doesn't really explain what makes this song so different from other songs.
+
+### Sweet Caroline self-similarity matrix (week 9, 1)
+
+```{r}
+sweet_caroline %>% 
+    compmus_self_similarity(timbre, 'cosine') %>% 
+    ggplot(
+        aes(
+            x = xstart + xduration / 2, 
+            width = xduration,
+            y = ystart + yduration / 2,
+            height = yduration,
+            fill = d)) + 
+    geom_tile() +
+    coord_fixed() +
+    scale_fill_viridis_c(option = 'A', guide = 'none') +
+    theme_classic() +
+    labs(x = '', y = '')+
+  ggtitle('Sweet Caroline timbre (2)')
+```
+
+***
+
+**Findings**
+
+When we look at this chromagram, we kind of see the same as in the previous plot. We can still see the ababab-structure, but the third a seems to be very different when comparing it to the other a-sections. In this plot it's easier to see that this part is not only shorter than the other a-sections, but that it also looks a lot like the b-sections. So this a-section might be why Sweet Caroline is an outlier. 
+
+### Sweet Caroline chromagram (week 9, 2)
+
+```{r}
+sweet_caroline %>% 
+  mutate(pitches = map(pitches, compmus_normalise, 'euclidean')) %>% 
+  compmus_gather_chroma %>% 
+  ggplot(
+    aes(
+      x = start + duration / 2, 
+      width = duration, 
+      y = pitch_class, 
+      fill = value)) + 
+  geom_tile() +
+  labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+  theme_minimal()+
+  ggtitle('Sweet Caroline pitches')
+```
+
+***
+
+**Findings**
+
+When looking at this chromagram we see that this song is mostly in e minor. This is a bit strange if we look into the plot of week 7 where it says that the song is in major. You might expect 'happy songs' to be in major, but this song proves that there are also 'happy songs' in minor (if there is no mistake made in this chromagram).
+
+### Kiss somebody cepstrogram (week 9, 3)
+
+```{r}
+kiss_somebody <- 
+  get_tidy_audio_analysis('17XU1PTSv4OfcBUE8rNYWm') %>% 
+  compmus_align(beats, segments) %>% 
+  select(beats) %>% unnest(beats) %>% 
+  mutate(
+    pitches = 
+      map(segments, 
+          compmus_summarise, pitches, 
+          method = 'mean', norm = 'euclidean')) %>% 
+  mutate(
+    timbre = 
+      map(segments, 
+          compmus_summarise, timbre, 
+          method = 'mean', norm = 'euclidean'))
+
+kiss_somebody %>% 
+  compmus_gather_timbre %>% 
+  ggplot(
+    aes(
+      x = start + duration / 2, 
+      width = duration, 
+      y = basis, 
+      fill = value)) + 
+  geom_tile() +
+  labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+  scale_fill_viridis_c(option = 'C') +
+  theme_classic()+
+  ggtitle('Kiss somebody timbre')
+```
+
+***
+
+**Findings**
+
+This cepstrogram is about 'kiss somebody' which is a 'typical happy song' acoording to the plot of week 7. It doesn't really show a clear structure when we look at c02, but when we look at c03 it looks like the songs is through-composed. There is no clear structure to be seen, since there are mostly purple and yellow beats with almost the same structre, but not as much the same so we can say there's a clear structure. When we compare this ceptrogram to the cepstrogram of Sweet Caroline we see that there's definitly a difference in structure. This is something you probably wouldn't expect, since we're still working with popmusic.
+
+### Kiss somebody chromagram (week 9, 4)
+
+```{r}
+kiss_somebody %>% 
+  mutate(pitches = map(pitches, compmus_normalise, 'euclidean')) %>% 
+  compmus_gather_chroma %>% 
+  ggplot(
+    aes(
+      x = start + duration / 2, 
+      width = duration, 
+      y = pitch_class, 
+      fill = value)) + 
+  geom_tile() +
+  labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+  theme_minimal()+
+  ggtitle('Kiss somebody pitches')
+```
+
+***
+
+**Findings**
+
+When we take a look at this chromagram we don't see a really clear (musical) pattern. I feel like the chromagram should be moved up by a semitone. This will show d,e,g and c as the most used pitches, which looks a lot like a c major chord. This corresponds to the plots of week 8, where we already found that most (happy) songs are in c. So this is what you might expect. 
 
 ### What is a 'happy' playlist? (week 6)
 
@@ -71,8 +223,9 @@ playslists_plot <- Happy_Sad %>%                       # Start with awards.
       x = valence,
       y = energy,
       size = liveness,
-      colour = mode
-    )
+      colour = mode,
+      label=track.name
+          )
   ) +
   geom_point() +               # Scatter plot.
   facet_wrap(~ playlist) +     # Separate charts per playlist.
@@ -151,14 +304,12 @@ Overall, we can conclude that all playlists are mostly in c and that d sharp is 
   
 ### What to find out for the coming weeks
 
-* Learn how to change the colors in the graph of week 7.
+* Learn how to change the colors in the graph of week 7 and in the chromagrams of week 9.
 
-* Incorporate ggplotly in my graphs from week 8 without showing only the first graphics.
+* Incorporate ggplotly in my graphs from week 8 (and making different tabs to show all of the graphs)
 
 *  Investigate the 'liveness' of happy songs according to the findings of week 7.
 
 * Look at the different (kind of) songs that are used in the 'Happy pop' and 'Happy hits' playlists to see if they overlap in some kind of way.
-
-* Learn how to add song titles to the ggplotly function.
 
 * Make my dashboard more user friendly (e.g. adjusting the chart sizes and make several graphs on a tab more accesible).
