@@ -19,261 +19,31 @@ library(spotifyr)
 library(compmus)
 source('spotify.R')
 ```
-### How well can we predict? (week 12)
-
-```{r}
-happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')%>% 
-  slice(1:20) %>% 
-  add_audio_analysis
-
-happy_hits <- get_playlist_audio_features('spotify', '37i9dQZF1DXdPec7aLTmlC')%>% 
-  slice(1:20) %>% 
-  add_audio_analysis
-
-happy_pop<- get_playlist_audio_features('spotify', '37i9dQZF1DX1H4LbvY4OJi')%>% 
-  slice(1:20) %>% 
-  add_audio_analysis
-
-happy <- 
-  happy_tunes %>% mutate(playlist = "Happy tunes") %>% 
-  bind_rows(
-    happy_hits %>% mutate(playlist = "Happy hits"),
-    happy_pop %>% mutate(playlist = "Happy pop")) %>% 
-  mutate(playlist = factor(playlist)) %>% 
-  mutate(
-    segments = 
-      map2(segments, key, compmus_c_transpose)) %>% 
-  mutate(
-    pitches = 
-      map(segments, 
-          compmus_summarise, pitches, 
-          method = 'mean', norm = 'manhattan'),
-    timbre =
-      map(
-        segments,
-        compmus_summarise, timbre,
-        method = 'mean')) %>% 
-  mutate(pitches = map(pitches, compmus_normalise, 'clr')) %>% 
-  mutate_at(vars(pitches, timbre), map, bind_rows) %>% 
-  unnest(cols = c(pitches, timbre))
-
-happy_class <- 
-  recipe(playlist ~
-           danceability +
-           energy +
-           loudness +
-           speechiness +
-           acousticness +
-           instrumentalness +
-           liveness +
-           valence +
-           tempo +
-           duration +
-           C + `C#|Db` + D + `D#|Eb` +
-           E + `F` + `F#|Gb` + G +
-           `G#|Ab` + A + `A#|Bb` + B +
-           c01 + c02 + c03 + c04 + c05 + c06 +
-           c07 + c08 + c09 + c10 + c11 + c12,
-         data = happy) %>% 
-  step_center(all_predictors()) %>%
-  step_scale(all_predictors()) %>%
-  # step_range(all_predictors()) %>% 
-  prep(happy) %>% 
-  juice
-
-happy_cv <- happy_class %>% vfold_cv(10)
-```
-```{r}
-happy_knn <- 
-  nearest_neighbor(mode = 'classification', neighbors = 1) %>% 
-  set_engine('kknn')
-predict_knn <- function(split)
-  fit(happy_knn, playlist ~ ., data = analysis(split)) %>% 
-  predict(assessment(split), type = 'class') %>%
-  bind_cols(assessment(split))
-
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
-  conf_mat(truth = playlist, estimate = .pred_class)
-
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
-  conf_mat(truth = playlist, estimate = .pred_class) %>% 
-  autoplot(type = 'mosaic')
-
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
-  conf_mat(truth = playlist, estimate = .pred_class) %>% 
-  autoplot(type = 'heatmap')
-
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
-  metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
-```
-
-***
-
-**Findings**
-
-When looking at the k-nearest neighbour, we can see that the 'happy' playlists are hard to predict.When we look at the confusion matrix we see that Cohen's kappa and Youden's J are very low, which means that a guess is (purely) based on chance. The chance that it is guess right is about 0.33, which is predictable. When we look at all the other information on this page (e.g. the 'mosaic') we can see that the computer is having a hard time identifying the 'Happy hits' and 'Happy pop' playslists. Let's take a look at how and if we can make the computer perform better.
-
-### How can we improve our predictions? (week 12)
-
-```{r}
-predict_knn_reduced <- function(split)
-  fit(
-    happy_knn, 
-    playlist ~ instrumentalness + duration + c11 + c05 + c09 + c02, 
-    data = analysis(split)) %>% 
-  predict(assessment(split), type = 'class') %>%
-  bind_cols(assessment(split))
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
-  metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
-
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
-  conf_mat(truth = playlist, estimate = .pred_class) %>% 
-  autoplot(type = 'mosaic')
-
-happy_cv %>% 
-  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
-  conf_mat(truth = playlist, estimate = .pred_class) %>% 
-  autoplot(type = 'heatmap')
-
-happy %>%
-  ggplot(aes(x = c11, y = c09, colour = playlist, size = duration)) +
-  geom_point(alpha = 0.8) +
-  scale_color_brewer(type = 'qual', palette = 'Accent') +
-  labs(
-    x = 'Timbre Component c11', 
-    y = 'Timbre Component c09', 
-    size = 'Duration (in seconds)', 
-    colour = 'Playlist'
-  )
-```
-
-***
-
-**Findings**
-
-When using random forest to see what kind of features are most important in determining wich playlist you hear. These features are duration, instrumentalness and the timbre components c02, c05,c09 and c11.Based on these features I tried to make the computer perform better on determining which song belongs to which playlist. As you can see in the confusion matrix the difference isn't (mostly) not that big and the computer is still having a hard time predicting as you can see in the 'mosaic' and the 'heatmap'. 
-
-I also tried to make a plot that consists out of timbre component c11 (on the x-axis), timbre component c09 and the duration of the songs. It also shows which song belongs to which playlist. When looking at this plot there isn't a real clear pattern to see. So I think we can conclude that there isn't a clear correlation between all these features. I don't think it is necessary to change my previous plots, because the improvement using these features is not that big and k-nearest neighbour also showed that it is already chance-based.
-
-I also tried this procedure on the other playlists, but that gave me an even smaller difference. Namely (k-nearest neighbour):
-
-```{r}
-life_sucks<- get_playlist_audio_features('spotify', '37i9dQZF1DX3YSRoSdA634')%>% 
-    slice(1:20) %>% 
-    add_audio_analysis
-
-sad_songs<- get_playlist_audio_features('spotify','37i9dQZF1DX7qK8ma5wgG1')%>% 
-    slice(1:20) %>% 
-    add_audio_analysis
-
-others <- 
-    life_sucks %>% mutate(playlist = "Life sucks") %>% 
-    bind_rows(
-        sad_songs %>% mutate(playlist = "Sad songs")) %>% 
-    mutate(playlist = factor(playlist)) %>% 
-    mutate(
-        segments = 
-            map2(segments, key, compmus_c_transpose)) %>% 
-    mutate(
-        pitches = 
-            map(segments, 
-                compmus_summarise, pitches, 
-                method = 'mean', norm = 'manhattan'),
-        timbre =
-            map(
-                segments,
-                compmus_summarise, timbre,
-                method = 'mean')) %>% 
-    mutate(pitches = map(pitches, compmus_normalise, 'clr')) %>% 
-    mutate_at(vars(pitches, timbre), map, bind_rows) %>% 
-    unnest(cols = c(pitches, timbre))
-
-others_class <- 
-    recipe(playlist ~
-               danceability +
-               energy +
-               loudness +
-               speechiness +
-               acousticness +
-               instrumentalness +
-               liveness +
-               valence +
-               tempo +
-               duration +
-               C + `C#|Db` + D + `D#|Eb` +
-               E + `F` + `F#|Gb` + G +
-               `G#|Ab` + A + `A#|Bb` + B +
-               c01 + c02 + c03 + c04 + c05 + c06 +
-               c07 + c08 + c09 + c10 + c11 + c12,
-           data = others) %>% 
-    step_center(all_predictors()) %>%
-    step_scale(all_predictors()) %>%
-    # step_range(all_predictors()) %>% 
-    prep(others) %>% 
-    juice
-
-others_cv <- others_class %>% vfold_cv(10)
-```
-
-```{r}
-others_knn <- 
-    nearest_neighbor(mode = 'classification', neighbors = 1) %>% 
-    set_engine('kknn')
-predict_others_knn <- function(split)
-    fit(others_knn, playlist ~ ., data = analysis(split)) %>% 
-    predict(assessment(split), type = 'class') %>%
-    bind_cols(assessment(split))
-
-others_cv %>% 
-    mutate(pred = map(splits, predict_others_knn)) %>% unnest(pred) %>% 
-    metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
-```
-And (feature selection using the same features as for the 'happy' playlists):
-
-```{r}
-predict_knn_reduced <- function(split)
-  fit(
-    others_knn, 
-    playlist ~ instrumentalness + duration + c11 + c05 + c09 + c02, 
-    data = analysis(split)) %>% 
-  predict(assessment(split), type = 'class') %>%
-  bind_cols(assessment(split))
-others_cv %>% 
-  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
-  metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
-```
-
 ### What is a 'happy' playlist? (week 6)
 
-**Introduction**
+**What and how to investigate? **
 
 What I would like to examine is ‘What does it mean to be a ‘happy’ playlist?’ or ‘What makes a playlist ‘happy’ if you compare it to playlists with negative emotions in the title?’
 
-What I am going to do is comparing playlists with ‘happy’ in the title to playlists that have opposite emotions in the title (e.g. sad). My corpus consist out of three playlists with the ‘happy’ in the title. Two playlists exist out of 100 songs and the other one out of 80. The other part of the corpus exist out of two playlists (‘Life sucks’ and ‘Sad songs’) which contain 100 and 60 songs. So the corpus represents playlists that are meant to be ‘happy’ and playlists that are not meant to be ‘happy’. The label ‘happy’ is chosen by Spotify so it represents that label well, but the other playlists are chosen by me and I feel like these playlists are the opposite of ‘happy’, but since it is not chosen by Spotify it might be that these labels overlap or are not related at all. 
+What I am going to do is comparing playlists with ‘happy’ in the title to playlists that have opposite emotions in the title (e.g. sad). My corpus consists out of three playlists with ‘happy’ in the title. Two playlists exist out of 100 songs and the other one out of 80. The other part of the corpus exists out of two playlists (‘Life sucks’ and ‘Sad songs’) which contain 100 and 60 songs. So the corpus represents playlists that are meant to be ‘happy’ and playlists that are not meant to be ‘happy’. The label ‘happy’ is chosen by Spotify so it represents that label well, but the other playlists are chosen by me and I feel like these playlists are the opposite of ‘happy’, but since these playlists are not chosen by Spotify it might be that these labels overlap or are not related at all. I don´t think this will happen since the playlists (and also the titles of the playlists) are made by Spotify. 
 
 
 ***
 
 **First findings**
 
-There seems to be a significantly difference in energy for ‘happy’ playlists and the other Playlists. The happy playlists are more energetic than the other ones (M= .66, SD= .14). The energy level of the other playlists is rather low (M= .31, SD= .14). This seems to be a promising feature for identifying differences between 'Happy'playlists and playlists that are not. Other promising features are:
+At first, I would like to take a look at the means and standard deviations of some track-level features (using Spotify api's) of the corpus. There seems to be a significantly difference in energy for ‘happy’ playlists and the other Playlists. The 'happy playlists' are more energetic than the other ones (M= .66, SD= .14). The energy level of the other playlists is rather low (M= .31, SD= .14). This seems to be a promising feature for identifying differences between 'Happy' playlists and playlists that are not. Other promising features are:
 
-There’s a significantly difference in valence between the ‘happy’ playlists and the others. The ‘happy’ playlists have a much higher valence (M= .54, SD= .18). The valence for ‘Sad songs’ and ‘Life sucks’ is very low (M= .28, SD= .13).
+* There’s a significantly difference in valence between the ‘happy’ playlists and the others. The ‘happy’ playlists have a much higher valence (M= .54, SD= .18). The valence for ‘Sad songs’ and ‘Life sucks’ is very low (M= .28, SD= .13).
 
-The mean for the dancebility of the sad songs is at least 0.64 and the other playlists are lower (both 0.51). So ‘happy’ playlists have a higher danceability, but the difference is small. 
+* The mean for the danceability of the sad songs is at least 0.64 and the other playlists are lower (both 0.51). So ‘happy’ playlists have a higher danceability, but the difference is small. 
 
-What is remarkable is that there doesn’t really seem to be a difference in the mode. They are all mostly major. I expected there to be a difference. The happy songs (M= .66, SD= .48) in major and the other playlists (M= .78, SD= .42) in minor, but that is'nt the case.
+* What is remarkable is that there doesn’t really seem to be a difference in the mode. They are all mostly major. I expected there to be a difference. The happy songs (M= .66, SD= .48) in major and the other playlists (M= .78, SD= .42) in minor, but that isn't the case.
 
-There aren't any extremes or outliers in my corpus, so I do not have to think about including or excluding any of them.
+There aren't any extremes or outliers in my corpus, so I don't have to think about including or excluding any of them.
 
 
-### Happy playlists are more energetic than other playlists (week 7)
+### Happy playlists are more energetic than the other playlists. (week 7)
 
 ```{r}
 happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')
@@ -308,7 +78,7 @@ playslists_plot <- Happy_Sad %>%                       # Start with awards.
       label=track.name
           )
   ) +
-  geom_point() +               # Scatter plot.
+  geom_point(alpha=0.55) +               # Scatter plot.
   facet_wrap(~ playlist) +     # Separate charts per playlist.
   scale_x_continuous(          # Fine-tune the x axis.
     limits = c(0, 1),
@@ -322,7 +92,7 @@ playslists_plot <- Happy_Sad %>%                       # Start with awards.
   ) +
   scale_colour_brewer(         # Use the Color Brewer to choose a palette.
     type = "qual",           # Qualitative set.
-    palette = "Paired"       # Name of the palette is 'Paired'.
+    palette = "Set1"       # Name of the palette is 'Paired'.
   ) +
   scale_size_continuous(       # Fine-tune the sizes of each point.
     trans = "exp",           # Use an exp transformation to emphasise loud.
@@ -334,7 +104,7 @@ playslists_plot <- Happy_Sad %>%                       # Start with awards.
     y = "Energy",
     colour = "Mode"
   )+
-  ggtitle('Valence, energy, liveness and mode')
+  ggtitle('The valence, energy, liveness and mode of the corpus')
 
 ggplotly(playslists_plot)
 ```
@@ -343,11 +113,11 @@ ggplotly(playslists_plot)
 
 **Findings**
 
-This plot is about the valence, energy, liveness and mode of the two kinds of playlists. It is based on the plot of Dr John Ashley Burgoyne that was showed in class. I wanted to use different colors from the same package, but I don't know yet how to do that.The plot shows that the valence and energy for most songs in the happy playlists are high, while for the other kind of playlists the valence and energy are low. This is the same pattern as I already saw last week. Another pattern that I saw last week is that there isn't really a difference in the mode of both kind of playlists. What also can be seen in the graph is that 'Happy songs' tend to have a higher liveness, then songs in the other playlists. When I checked this audio feature last week I didn't see that there is such a difference between the playlists(M=.18, SD=.14 for 'Happy' and M=.13, SD=.06). This is something I didn't expect to find, so I would like to investigate this further in the coming weeks.    
+This plot is about the valence, energy, liveness and mode of the two kinds of playlists. It is based on the plot of Dr John Ashley Burgoyne that was showed in class. The plot shows that the valence and energy for most songs in the happy playlists are high (most songs have an energy between 0.5 and 0.975 and a valence between 0.2930 and 0.972), while for the other kind of playlists the valence and energy are low (most songs have an energy between 0.0307 and 0.5 and a valence between 0.0397 and 0.4). This is the same pattern as I already saw last week. Another pattern that I saw last week is that there isn't really a difference in the mode of both kinds of playlists. What also can be seen in the graph is that 'Happy songs' tend to have a slightly higher liveness (about 0.18), then songs in the other playlists (about 0.14). When I checked this audio feature last week, I didn't see that there is such a difference between the playlists (M=.18, SD=.14 for 'Happy' and M=.13, SD=.06 for the others). This is something I didn't expect to find when looking at the findings of last week, but it is to be expected when using common sense and a bit of musical knowledge.    
 
-Last week I thought there were'nt any outliers, but there seem to be some. I don't think they will effect the results, because there are many songs that aren't outliers. So I won't take the outliers out.
+Last week I thought there weren't any outliers, but there seem to be some. I don't think they will affect the results, because there are many songs that aren't outliers. So I won't take the outliers out, but I would like to know more about the outliers from the 'happy playlists'. I wonder if there are more reasons why for example, 'Sweet Caroline' is an outlier than the energy it contains. That is something I will dig deeper into in the next tabs. 
 
-### Most Happy songs are in C (week 8)
+### Most happy songs are in C. (week 8)
 
 ```{r}
 ggplot(Happy_Sad, aes(x=key))+
@@ -370,22 +140,73 @@ ggplot(happy_playlists, aes(x=key))+
     facet_wrap(~playlist)+
   theme_minimal()+
     ggtitle('The other playlists')
-  ```
+```
  
    ***
 
 **Findings**
     
-In this part I added three graphs that are about the playlists. The first graphs you can see are about the difference between 'happy playlists' and the other kinds of playlists. There you can see that most songs are in c or c sharp. That is to be expected since c is a 'basic' key in music theory. What is remarkable is that the distribution in the middle section of the 'happy playlists' barchart is very high. There aren't really any big differences in mode, while as you look at the barchart of the opposite playlists you see that not everything is (almost) the same. There is more variety in there, but this also doesn't show a very big difference. 
+In this part I added three bar charts that are about the playlists. The first graphs you can see are about the difference between 'happy playlists' and the other kinds of playlists. There you can see that most songs are in c or c sharp. That is to be expected since c is a 'basic' key in music theory. What is remarkable is that the distribution in the middle section of the 'happy playlists' bar chart is very high (between 22 and 28). There aren't any big differences in mode, while as you look at the bar chart of the other playlists you see that not everything is (almost) the same. There is more variety in there, but this also doesn't show a very big difference. 
 
-When we take a closer look at the different kinds of 'happy playslist' we see there are three different distributions for every playlist, but they do show some similarities. For example Happy pop and Happy tunes don't have a lot of songs in d sharp, but do have a lot of songs in b and f sharp. When we compare Happy pop to Happy hits their shape is almost the same, but Happy hits contains a lot more song in g than does Happy pop.That they look so much the same might be due to that they contain the same (kind of) songs, but that is something I want to look at in the future weeks. Something that also can be seen in all of these graphs is that all the playlists contain a lot of songs in c. That is the same as we saw earlier when comparing all the Happy playlists to all the other playlists.
+When we take a closer look at the different kinds of 'happy playlists' we see there are three different distributions for every playlist, but they do show some similarities. For example, 'Happy pop' and 'Happy tunes' don't have a lot of songs in d sharp (about 2), but do have a lot of songs in a and f (about 7 and 8). When we compare 'Happy pop' to 'Happy hits' their shape is almost the same, but 'Happy hits' contains a lot more song in g (14 songs) than does 'Happy pop' (6 songs). Something that also can be seen in all these graphs is that all the playlists contain a lot of songs in c. That is the same as we saw earlier when comparing all the Happy playlists to all the other playlists.
 
-Now take a look at the third set of graphs that compare 'Life sucks' to 'Sad songs'. Again most songs are in c, but what we can see now as well is that 'Sad songs' contains a lot of songs in every key, only the c stands out, but not as much as in the other graphs. From this graph we can conclude that sad songs are written in any key, but we must look at more playlists that are 'sad' to conclude it for the label of 'sad' that spotify uses. When we look at 'Life sucks' we see a graph that is comparable to the happy playlists. C stands out again and there also aren't much songs in d sharp, just as the 'Happy pop' and 'Happy tunes' playlists. When we look at the middle section, the amount of songs per key is almost the same, but higher than for most keys in the last section. The last section shows the same pattern, but with less songs per key. 
+Now take a look at the third set of graphs that compares 'Life sucks' to 'Sad songs'. Again, most songs are in c, but what we can see now as well is that 'Sad songs' contains a lot of songs in every key, only the c stands out, but not as much as in the other graphs. From this graph we can conclude that sad songs are written in any key, but we must look at more playlists that are 'sad' to conclude it for the label of 'sad' that Spotify uses. When we look at 'Life sucks' we see a graph that is comparable to the happy playlists. C stands out again and there also aren't much songs in d sharp (2 songs), just as with the 'Happy pop' and 'Happy tunes' playlists. When we look at the middle section, the amount of songs per key is almost the same, but higher than for most keys in the last section. The last section shows the same pattern, but with less songs per key. 
 
 Overall, we can conclude that all playlists are mostly in c and that d sharp is not used often in these playlists. We can also conclude that there doesn't really seem to be a difference in mode per kind of playlist. So what makes a 'Happy playlist' happy doesn't lie in the key that is used.
 
+### Most happy songs have a tempo between 75 and 125 BPM. (week 11, 2)
 
-### Sweet Caroline Cepstrogram (week 9)
+```{r}
+happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')
+happy_hits <- get_playlist_audio_features('spotify', '37i9dQZF1DXdPec7aLTmlC')
+happy_pop<- get_playlist_audio_features('spotify', '37i9dQZF1DX1H4LbvY4OJi')
+life_sucks<- get_playlist_audio_features('spotify', '37i9dQZF1DX3YSRoSdA634')
+sad_songs<- get_playlist_audio_features('spotify','37i9dQZF1DX7qK8ma5wgG1')
+
+happy_playlists <-
+  happy_tunes %>% mutate(playlist = "Happy tunes") %>%
+  bind_rows(happy_hits %>% mutate(playlist = "Happy hits"))%>%
+  bind_rows(happy_pop %>% mutate(playlist = "Happy pop"))
+
+other_playlists <-
+  life_sucks %>% mutate(playlist = "Life sucks") %>%
+  bind_rows(sad_songs %>% mutate(playlist = "Sad songs"))
+
+Happy_Sad <-
+  happy_playlists %>% mutate(playlist = "Happy playlists") %>%
+  bind_rows(other_playlists %>% mutate(playlist = "Other playlists"))
+
+ggplot(Happy_Sad, aes(x=tempo))+
+  scale_x_continuous()+
+  geom_histogram(fill='lightpink', color='pink2', binwidth= 30)+
+  facet_wrap(~playlist)+
+  theme_bw()+
+    ggtitle('Happy playlists vs. Other playlists')
+  
+ggplot(happy_playlists, aes(x=tempo))+
+    scale_x_continuous()+
+    geom_histogram(fill='lightcoral', color='indianred2', binwidth = 30)+
+    facet_wrap(~playlist)+
+  theme_bw()+
+    ggtitle('The different happy playlists')
+  
+  ggplot(other_playlists, aes(x=tempo))+
+    scale_x_continuous()+
+    geom_histogram(fill='hotpink4', color='deeppink4', binwidth = 30)+
+    facet_wrap(~playlist)+
+  theme_bw()+
+    ggtitle('Other kinds of playlists')
+```
+ 
+   ***
+
+**Findings**
+
+When we compare 'happy' playlists to other kinds of playlists, we can't see big differences in the tempo (BPM) that is used per song. At a first glance it looks like there is a 'huge' difference in the distribution, but when you take a closer look, you can see that the 'happy' playlists dataset contains more songs and is like an 'extreme' version of the other kinds of playlists (M=119, SD= 24.3 for the 'happy playlists and M=115, SD=31.8 for the 'other' playlists). The peaks around 75 and 125 are higher at the histogram of the 'happy' playlist, but the peaks are around the same tempo as in the histogram of the other kinds of playlists. So, we can conclude that there doesn't seem to be a real difference in the tempo for these playlists. 
+
+When we take a closer look at the different 'happy' playlists, we see the same kind of patterns with peaks around 75 and 125. When looking at the histograms of the other kinds of playlist, we see that 'life sucks' shows almost the same pattern as the first histogram that contains all 'happy' playlists. The only differences here are that the peak around 75 is higher than the one around 125 as is the case in the 'happy' playlists histogram and that 'life sucks' contains less songs (obviously). There are more differences to see in the histogram of 'sad songs'. The pattern is a bit different, but the overall shape is almost the same as the other histograms. Were the others got a peak around 75 that is higher than the peak containing 150, this histogram shows the exact opposite, but the difference isn't that big, so it doesn't affect the ´overall´ histogram of the playlists. In conclusion, the tempo of a happy playlist isn't that different when comparing it to other kinds of playlists. So what makes a 'Happy playlist' happy also doesn't lie in the tempo of the songs. 
+
+### Sweet Caroline has a clear structure. (week 9)
 
 ```{r}
 sweet_caroline <- 
@@ -412,71 +233,11 @@ sweet_caroline %>%
             y = basis, 
             fill = value)) + 
     geom_tile() +
-    labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+    labs(x = 'Time (s)', y = 'Timbre components', fill = 'Magnitude') +
     scale_fill_viridis_c(option = 'C') +
     theme_classic()+
   ggtitle ('Sweet Caroline timbre')
-```
 
-***
-
-**Findings**
-
-This plot shows the timbre of 'Sweet Caroline', which is an outlier in the plot of week 7. As we can see it has almost an aba'ba''b structure. This is what you might expect when looking at popmusic. Since a lot of popsongs are structured like this.So this doesn't really explain what makes this song so different from other songs.
-
-### Sweet Caroline self-similarity matrix (week 9, 1)
-
-```{r}
-sweet_caroline %>% 
-    compmus_self_similarity(timbre, 'cosine') %>% 
-    ggplot(
-        aes(
-            x = xstart + xduration / 2, 
-            width = xduration,
-            y = ystart + yduration / 2,
-            height = yduration,
-            fill = d)) + 
-    geom_tile() +
-    coord_fixed() +
-    scale_fill_viridis_c(option = 'A', guide = 'none') +
-    theme_classic() +
-    labs(x = '', y = '')+
-  ggtitle('Sweet Caroline timbre (2)')
-```
-
-***
-
-**Findings**
-
-When we look at this chromagram, we kind of see the same as in the previous plot. We can still see the ababab-structure, but the third a seems to be very different when comparing it to the other a-sections. In this plot it's easier to see that this part is not only shorter than the other a-sections, but that it also looks a lot like the b-sections. So this a-section might be why Sweet Caroline is an outlier. 
-
-### Sweet Caroline chromagram (week 9, 2)
-
-```{r}
-sweet_caroline %>% 
-  mutate(pitches = map(pitches, compmus_normalise, 'euclidean')) %>% 
-  compmus_gather_chroma %>% 
-  ggplot(
-    aes(
-      x = start + duration / 2, 
-      width = duration, 
-      y = pitch_class, 
-      fill = value)) + 
-  geom_tile() +
-  labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
-  theme_minimal()+
-  ggtitle('Sweet Caroline pitches')
-```
-
-***
-
-**Findings**
-
-When looking at this chromagram we see that this song is mostly in e minor. This is a bit strange if we look into the plot of week 7 where it says that the song is in major. You might expect 'happy songs' to be in major, but this song proves that there are also 'happy songs' in minor (if there is no mistake made in this chromagram).
-
-### Kiss somebody cepstrogram (week 9, 3)
-
-```{r}
 kiss_somebody <- 
   get_tidy_audio_analysis('17XU1PTSv4OfcBUE8rNYWm') %>% 
   compmus_align(beats, segments) %>% 
@@ -501,21 +262,56 @@ kiss_somebody %>%
       y = basis, 
       fill = value)) + 
   geom_tile() +
-  labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+  labs(x = 'Time (s)', y = 'Timbre components', fill = 'Magnitude') +
   scale_fill_viridis_c(option = 'C') +
   theme_classic()+
   ggtitle('Kiss somebody timbre')
+
+sweet_caroline %>% 
+    compmus_self_similarity(timbre, 'cosine') %>% 
+    ggplot(
+        aes(
+            x = xstart + xduration / 2, 
+            width = xduration,
+            y = ystart + yduration / 2,
+            height = yduration,
+            fill = d)) + 
+    geom_tile() +
+    coord_fixed() +
+    scale_fill_viridis_c(option = 'A', guide = 'none') +
+    theme_classic() +
+    labs(x = 'Time (s)', y = 'Time (s)')+
+  ggtitle('Sweet Caroline timbre (2)')
 ```
 
 ***
 
 **Findings**
 
-This cepstrogram is about 'kiss somebody' which is a 'typical happy song' acoording to the plot of week 7. It doesn't really show a clear structure when we look at c02, but when we look at c03 it looks like the songs is through-composed. There is no clear structure to be seen, since there are mostly purple and yellow beats with almost the same structre, but not as much the same so we can say there's a clear structure. When we compare this ceptrogram to the cepstrogram of Sweet Caroline we see that there's definitly a difference in structure. This is something you probably wouldn't expect, since we're still working with popmusic.
+This plot shows the timbre of 'Sweet Caroline', which is an outlier in the plot of week 7. As we can see it has almost an aba'ba''b structure. This is what you might expect when looking at pop music. Since a lot of pop songs are structured like this. So this doesn't really explain what makes this song so different from other songs. When listening to the song you can hear this structure: intro, verse, pre-chorus, chorus, verse, pre-chorus, chorus, instrumental part and an outro. The cepstrogram doesn't show the structure in so much detail, but it seems like the overall structure shows some similarities. Maybe the self-similarity matrix shows this pattern in more detail (see text below).
 
-### Kiss somebody chromagram (week 9, 4)
+This cepstrogram is about 'kiss somebody' which is a 'typical happy' song according to the plot of week 7. It doesn't show a clear structure when we look at c02, but when we look at c03 it looks like the songs is through composed. There is no clear structure to be seen, since there are mostly purple and yellow beats with almost the same structure. When we compare this cepstrogram to the cepstrogram of Sweet Caroline we see that there's definitely a difference in structure. This is something you probably wouldn't expect, since we're still working with pop music. Also, when looking at the other timbre components, we can't see a clear pattern as well. The song isn't really through-composed is what you can hear when you listen to the song. It's structure is: verse, pre-chorus, chorus, verse, pre-chorus, chorus, bridge and chorus, but it seems like the instruments play almost the same things throughout the whole song, which may have influenced the timbre of the song. 
+
+Let's take a look at the self-similarity matrix of 'Sweet Caroline' to see if we see the same pattern as in the cepstrogram. When looking at the self-similarity matrix, we see the same as in the cepstrogram of 'Sweet Caroline'. We can still see the ababab-structure, but the third a-section seems to be very different when comparing it to the other a-sections. In this plot it's easier to see that this part is not only shorter than the other a-sections, but that it also looks a lot like the b-sections (other details can be seen as well, e.g. the more detailed structured mentioned in the text above). So this a-section might be why Sweet Caroline is an outlier, but we can't compare it properly to 'kiss somebody' since the cepstrogram isn't that clear. I also plotted the self-similarity matrix of this song (not included in the research), but that also didn't give a clear structure. I feel like it is hard for Spotify to determine the timbre, since 'timbre' also doesn't have a clear definition in music theory. 
+
+### The most important chord in Sweet Caroline is e minor. (week 9, 2)
 
 ```{r}
+sweet_caroline %>% 
+  mutate(pitches = map(pitches, compmus_normalise, 'euclidean')) %>% 
+  compmus_gather_chroma %>% 
+  ggplot(
+    aes(
+      x = start + duration / 2, 
+      width = duration, 
+      y = pitch_class, 
+      fill = value)) + 
+  geom_tile() +
+  labs(x = 'Time (s)', y = 'Pitch', fill = 'Magnitude') +
+  theme_minimal()+
+  ggtitle('Sweet Caroline pitches')
+
+
 kiss_somebody %>% 
   mutate(pitches = map(pitches, compmus_normalise, 'euclidean')) %>% 
   compmus_gather_chroma %>% 
@@ -526,7 +322,7 @@ kiss_somebody %>%
       y = pitch_class, 
       fill = value)) + 
   geom_tile() +
-  labs(x = 'Time (s)', y = NULL, fill = 'Magnitude') +
+  labs(x = 'Time (s)', y = 'Pitch', fill = 'Magnitude') +
   theme_minimal()+
   ggtitle('Kiss somebody pitches')
 ```
@@ -535,9 +331,11 @@ kiss_somebody %>%
 
 **Findings**
 
-When we take a look at this chromagram we don't see a really clear (musical) pattern. I feel like the chromagram should be moved up by a semitone. This will show d,e,g and c as the most used pitches, which looks a lot like a c major chord. This corresponds to the plots of week 8, where we already found that most (happy) songs are in c. So this is what you might expect. 
+When looking at this chromagram we see that this song contains mostly the e minor chord. In the plot of week 7 we can see that the song is in major, so it is likely that e minor isn't the key the song is in, but that it is one of the most important chords next to the tonic. Those chords are the dominant and subdominant so that suggests that the key is A major or B major, but that isn't likely since the dominant and subdominant are often major instead of minor. So I feel like this chromagram doesn't represent the song properly. 
+
+When we take a look at the chromagram of 'Kiss somebody' we don't see a really clear (musical) pattern. I feel like the chromagram should be moved up by a semitone. This will show d, e, g and c as the most used pitches, which looks a lot like a C major chord. This corresponds to the plots of week 8, where we already found that most (happy) songs are in c. Which makes it likely that the song is in c and it is what you might expect according to the plot of week 8. In the plot of week 7 we could already see that the song is in major, so that also pleads for moving the chromagram up by a semitone. 
   
-### week 10
+### Sweet Caroline is in g minor. Or not? (week 10)
 
 ```{r}
 circshift <- function(v, n) {if (n == 0) v else c(tail(v, n), head(v, -n))}
@@ -639,95 +437,8 @@ sweet_caroline_key %>%
     geom_tile() +
     scale_fill_viridis_c(option = 'E', guide = 'none') +
     theme_minimal() +
-    labs(x = 'Time (s)', y = '')+
+    labs(x = 'Time (s)', y = 'Key')+
   ggtitle('Sweet Caroline keygram')
-
-```
-
-### week 10, 1
-
-```{r}
-circshift <- function(v, n) {if (n == 0) v else c(tail(v, n), head(v, -n))}
-                                    
-    # C     C#    D     Eb    E     F     F#    G     Ab    A     Bb    B 
-major_chord <- 
-    c(1,    0,    0,    0,    1,    0,    0,    1,    0,    0,    0,    0)
-minor_chord <- 
-    c(1,    0,    0,    1,    0,    0,    0,    1,    0,    0,    0,    0)
-seventh_chord <- 
-    c(1,    0,    0,    0,    1,    0,    0,    1,    0,    0,    1,    0)
-
-major_key <- 
-    c(6.35, 2.23, 3.48, 2.33, 4.38, 4.09, 2.52, 5.19, 2.39, 3.66, 2.29, 2.88)
-minor_key <-
-    c(6.33, 2.68, 3.52, 5.38, 2.60, 3.53, 2.54, 4.75, 3.98, 2.69, 3.34, 3.17)
-
-chord_templates <-
-    tribble(
-        ~name  , ~template,
-        'Gb:7'  , circshift(seventh_chord,  6),
-        'Gb:maj', circshift(major_chord,    6),
-        'Bb:min', circshift(minor_chord,   10),
-        'Db:maj', circshift(major_chord,    1),
-        'F:min' , circshift(minor_chord,    5),
-        'Ab:7'  , circshift(seventh_chord,  8),
-        'Ab:maj', circshift(major_chord,    8),
-        'C:min' , circshift(minor_chord,    0),
-        'Eb:7'  , circshift(seventh_chord,  3),
-        'Eb:maj', circshift(major_chord,    3),
-        'G:min' , circshift(minor_chord,    7),
-        'Bb:7'  , circshift(seventh_chord, 10),
-        'Bb:maj', circshift(major_chord,   10),
-        'D:min' , circshift(minor_chord,    2),
-        'F:7'   , circshift(seventh_chord,  5),
-        'F:maj' , circshift(major_chord,    5),
-        'A:min' , circshift(minor_chord,    9),
-        'C:7'   , circshift(seventh_chord,  0),
-        'C:maj' , circshift(major_chord,    0),
-        'E:min' , circshift(minor_chord,    4),
-        'G:7'   , circshift(seventh_chord,  7),
-        'G:maj' , circshift(major_chord,    7),
-        'B:min' , circshift(minor_chord,   11),
-        'D:7'   , circshift(seventh_chord,  2),
-        'D:maj' , circshift(major_chord,    2),
-        'F#:min', circshift(minor_chord,    6),
-        'A:7'   , circshift(seventh_chord,  9),
-        'A:maj' , circshift(major_chord,    9),
-        'C#:min', circshift(minor_chord,    1),
-        'E:7'   , circshift(seventh_chord,  4),
-        'E:maj' , circshift(major_chord,    4),
-        'G#:min', circshift(minor_chord,    8),
-        'B:7'   , circshift(seventh_chord, 11),
-        'B:maj' , circshift(major_chord,   11),
-        'D#:min', circshift(minor_chord,    3))
-
-key_templates <-
-    tribble(
-        ~name    , ~template,
-        'Gb:maj', circshift(major_key,  6),
-        'Bb:min', circshift(minor_key, 10),
-        'Db:maj', circshift(major_key,  1),
-        'F:min' , circshift(minor_key,  5),
-        'Ab:maj', circshift(major_key,  8),
-        'C:min' , circshift(minor_key,  0),
-        'Eb:maj', circshift(major_key,  3),
-        'G:min' , circshift(minor_key,  7),
-        'Bb:maj', circshift(major_key, 10),
-        'D:min' , circshift(minor_key,  2),
-        'F:maj' , circshift(major_key,  5),
-        'A:min' , circshift(minor_key,  9),
-        'C:maj' , circshift(major_key,  0),
-        'E:min' , circshift(minor_key,  4),
-        'G:maj' , circshift(major_key,  7),
-        'B:min' , circshift(minor_key, 11),
-        'D:maj' , circshift(major_key,  2),
-        'F#:min', circshift(minor_key,  6),
-        'A:maj' , circshift(major_key,  9),
-        'C#:min', circshift(minor_key,  1),
-        'E:maj' , circshift(major_key,  4),
-        'G#:min', circshift(minor_key,  8),
-        'B:maj' , circshift(major_key, 11),
-        'D#:min', circshift(minor_key,  3))
 
 kiss_somebody_key <- 
     get_tidy_audio_analysis('17XU1PTSv4OfcBUE8rNYWm') %>% 
@@ -746,129 +457,261 @@ kiss_somebody_key %>%
     geom_tile() +
     scale_fill_viridis_c(option = 'E', guide = 'none') +
     theme_minimal() +
-    labs(x = 'Time (s)', y = '')+
+    labs(x = 'Time (s)', y = 'Key')+
   ggtitle('Kiss somebody keygram')
-
 ```
 
-###  The loudness of Sweet Caroline changes a lot (week 11)
-
-```{r}
-sweet_caroline <- 
-    get_tidy_audio_analysis('3298yRJKPcCndQdNiTZKIo') %>% 
-    select(segments) %>% unnest(segments)
-
-sweet_caroline %>% 
-    mutate(loudness_max_time = start + loudness_max_time) %>% 
-    arrange(loudness_max_time) %>% 
-    mutate(delta_loudness = loudness_max - lag(loudness_max)) %>% 
-    ggplot(aes(x = loudness_max_time, y = pmax(0, delta_loudness))) +
-  scale_x_continuous(breaks= c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130, 140, 150, 160, 170, 180, 190, 200))+
-    geom_line() +
-    theme_minimal() +
-    labs(x = 'Time (s)', y = 'Novelty')
-
-```
-
- ***
+***
 
 **Findings**
 
-At first this novelty function would probably look a bit confusing, but when you know the structure of Sweet Caroline, you can see it in this novelty function as well. So I will tell you what the structure of this song is: intro (i), verse (v), pre-chorus (pc), chorus (c), v, pc, c, instrumental part and outro. Knowing that the first verse starts around 13 seconds and the second verse starts around 82 seconds, you can see a clear pattern that repeats itself. Around 82 seconds in the novelty function it looks like the song is cut in two pieces, which is also the case if you look at the structure of the song. Around 157 you can see some 'strange' peaks. This is actually the part where only the instruments play. Around 170 seconds Neil Diamond starts singing again and the instruments become less loud until the song eventually fades out (around 170 seconds). This is also something you can see in the novelty function. Now let's take a look at kiss somebody. 
+In the keygram of 'Sweet Caroline' we see that the song must be in g minor. That is not to be expected when we look at the plot of week 7 where it says that the song is in major. The chromagram showed that one of the most important chords in the song is e minor, which is the Vi chord of g minor. That is not what you expect of a chord that is used a lot in a song. As already said when looking at the chromagram you expect the key to be either a minor or b minor. When looking at the keygram we can see that a major also stands out next to g minor. Since the plot of week 7 tells us the song is in major, I believe that A major seems more likely than g minor. Also when we relate the e minor chord of the chromagram to a major it becomes more likely that a major is the key, even though the evidence in the keygram isn't the clearest of them all. 
+
+When we take a look at the keygram of 'Kiss somebody' we see different keys standing out, namely g sharp minor, A major, G major, g minor and G flat major. It seems like Spotify is having a hard time determining which pitches are being played in the song. All the keys highlighted in this keygram are around g, so you expect g to be an important pitch. In the plot of week 7 we can see that the song is in major, so g sharp minor and g minor are less likely to be the key of the song. We already saw in the chromagram that the C major chord is an important chord in the song. When using this information it is more likely that G major is the key, since C is IV of the G major key and iii of the A major key. Also, when using the information of the 'happy' playlists' histogram of week 8, we see that G major is also used more often than G flat major. 
+
+Overall, it looks like it is hard to determine which keys the songs are in based on these keygrams and we also need to use our music theory knowledge and the knowledge gained from the plots from previous weeks.
 
 
-### Kiss somebody isn't that loud (week 11, 1)
+### How well can we predict? (week 12)
 
 ```{r}
-kiss_somebody <- 
-    get_tidy_audio_analysis('17XU1PTSv4OfcBUE8rNYWm') %>% 
-    select(segments) %>% unnest(segments)
+happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')%>% 
+  slice(1:20) %>% 
+  add_audio_analysis
 
-kiss_somebody %>% 
-    mutate(loudness_max_time = start + loudness_max_time) %>% 
-    arrange(loudness_max_time) %>% 
-    mutate(delta_loudness = loudness_max - lag(loudness_max)) %>% 
-    ggplot(aes(x = loudness_max_time, y = pmax(0, delta_loudness))) +
-  scale_x_continuous(breaks= c(0, 10, 20, 30, 40, 50, 60, 70, 80, 90, 100, 110, 120, 130))+
-    geom_line() +
-    theme_classic() +
-    labs(x = 'Time (s)', y = 'Novelty')
+happy_hits <- get_playlist_audio_features('spotify', '37i9dQZF1DXdPec7aLTmlC')%>% 
+  slice(1:20) %>% 
+  add_audio_analysis
 
+happy_pop<- get_playlist_audio_features('spotify', '37i9dQZF1DX1H4LbvY4OJi')%>% 
+  slice(1:20) %>% 
+  add_audio_analysis
+
+happy <- 
+  happy_tunes %>% mutate(playlist = "Happy tunes") %>% 
+  bind_rows(
+    happy_hits %>% mutate(playlist = "Happy hits"),
+    happy_pop %>% mutate(playlist = "Happy pop")) %>% 
+  mutate(playlist = factor(playlist)) %>% 
+  mutate(
+    segments = 
+      map2(segments, key, compmus_c_transpose)) %>% 
+  mutate(
+    pitches = 
+      map(segments, 
+          compmus_summarise, pitches, 
+          method = 'mean', norm = 'manhattan'),
+    timbre =
+      map(
+        segments,
+        compmus_summarise, timbre,
+        method = 'mean')) %>% 
+  mutate(pitches = map(pitches, compmus_normalise, 'clr')) %>% 
+  mutate_at(vars(pitches, timbre), map, bind_rows) %>% 
+  unnest(cols = c(pitches, timbre))
+
+happy_class <- 
+  recipe(playlist ~
+           danceability +
+           energy +
+           loudness +
+           speechiness +
+           acousticness +
+           instrumentalness +
+           liveness +
+           valence +
+           tempo +
+           duration +
+           C + `C#|Db` + D + `D#|Eb` +
+           E + `F` + `F#|Gb` + G +
+           `G#|Ab` + A + `A#|Bb` + B +
+           c01 + c02 + c03 + c04 + c05 + c06 +
+           c07 + c08 + c09 + c10 + c11 + c12,
+         data = happy) %>% 
+  step_center(all_predictors()) %>%
+  step_scale(all_predictors()) %>%
+  # step_range(all_predictors()) %>% 
+  prep(happy) %>% 
+  juice
+
+happy_cv <- happy_class %>% vfold_cv(10)
+```
+```{r}
+happy_knn <- 
+  nearest_neighbor(mode = 'classification', neighbors = 1) %>% 
+  set_engine('kknn')
+predict_knn <- function(split)
+  fit(happy_knn, playlist ~ ., data = analysis(split)) %>% 
+  predict(assessment(split), type = 'class') %>%
+  bind_cols(assessment(split))
+
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
+  conf_mat(truth = playlist, estimate = .pred_class)
+
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
+  conf_mat(truth = playlist, estimate = .pred_class) %>% 
+  autoplot(type = 'mosaic')
+
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
+  conf_mat(truth = playlist, estimate = .pred_class) %>% 
+  autoplot(type = 'heatmap')
+
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn)) %>% unnest(pred) %>% 
+  metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
 ```
 
- ***
+***
 
 **Findings**
 
-This novelty function shows less peaks than the novelty function of Sweet Caroline. This might be because Sweet Caroline contains much more 'live' instruments and Kiss somebody is made by electronic instruments so that probably wouldn't make such a difference in loudness. That is also the reason why the structure of this song is hard to see in this novelty function, even when you know the structure of the song and the time stamps that go along with the different parts. At the end of the song it becomes harder to identify each part, because the parts are more compressed than earlier in the song. Compared to Sweet Caroline, you might want to conclude that typical 'happy' hits are harder to understand when looking at a novelty function due to there lack of big changes in loudness that might be caused by electronic instruments.
+After trying to find what makes a 'happy' playlist 'happy' I wanted to know more about the corpus itself. How well can the computer predict which 'happy' song belongs to which 'happy' playlist. So what I did first was using k-nearest neighbour and see how well the computer did. When looking at the table of k-nearest neighbour, we can see that the 'happy' playlists are hard to predict. When we look at the confusion matrix (beneath the 'mosaic' and 'heatmap'), we see that Cohen's kappa and Youden's J are very low (about 0), which means that a guess is (purely) based on chance. The chance that it is guess right is about 0.33. That is predictable, since 1 in 3 is 0.33. 
 
-### Most 'happy' songs have a tempo between 75 and 125 BPM (week 11, 2)
+When we look at all the other information on this page (e.g. the 'mosaic') we can see that the computer is having a hard time identifying especially the 'Happy hits' and 'Happy pop' playlists. Let's take a look at how and if we can make the computer perform better. On the next tab you can see how I tried to improve the predictions using random forests, since that seemed to me as the best method to use, since it's random (that is also why I didn't include any definite numbers in the findings on the next tab).
+
+### How can we improve our predictions? (week 12)
 
 ```{r}
-happy_tunes <- get_playlist_audio_features('spotify', '37i9dQZF1DX9u7XXOp0l5L')
-happy_hits <- get_playlist_audio_features('spotify', '37i9dQZF1DXdPec7aLTmlC')
-happy_pop<- get_playlist_audio_features('spotify', '37i9dQZF1DX1H4LbvY4OJi')
-life_sucks<- get_playlist_audio_features('spotify', '37i9dQZF1DX3YSRoSdA634')
-sad_songs<- get_playlist_audio_features('spotify','37i9dQZF1DX7qK8ma5wgG1')
+predict_knn_reduced <- function(split)
+  fit(
+    happy_knn, 
+    playlist ~ instrumentalness + duration + c11 + c05 + c09 + c02, 
+    data = analysis(split)) %>% 
+  predict(assessment(split), type = 'class') %>%
+  bind_cols(assessment(split))
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
+  metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
 
-happy_playlists <-
-  happy_tunes %>% mutate(playlist = "Happy tunes") %>%
-  bind_rows(happy_hits %>% mutate(playlist = "Happy hits"))%>%
-  bind_rows(happy_pop %>% mutate(playlist = "Happy pop"))
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
+  conf_mat(truth = playlist, estimate = .pred_class) %>% 
+  autoplot(type = 'mosaic')
 
-other_playlists <-
-  life_sucks %>% mutate(playlist = "Life sucks") %>%
-  bind_rows(sad_songs %>% mutate(playlist = "Sad songs"))
+happy_cv %>% 
+  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
+  conf_mat(truth = playlist, estimate = .pred_class) %>% 
+  autoplot(type = 'heatmap')
 
-Happy_Sad <-
-  happy_playlists %>% mutate(playlist = "Happy playlists") %>%
-  bind_rows(other_playlists %>% mutate(playlist = "Other playlists"))
+happy %>%
+    ggplot(aes(x = c11, y = c09, colour = playlist, size = duration)) +
+    geom_point(alpha = 0.8) +
+    scale_color_brewer(type = 'qual', palette = 'Accent') +
+    labs(
+        x = 'Timbre Component c11', 
+        y = 'Timbre Component c09', 
+        size = 'Duration (in seconds)', 
+        colour = 'Playlist'
+    )
+```
 
-ggplot(Happy_Sad, aes(x=tempo))+
-  scale_x_continuous()+
-  geom_histogram(fill='lightpink', color='pink2', binwidth= 30)+
-  facet_wrap(~playlist)+
-  theme_bw()+
-    ggtitle('Happy playlists vs. Other playlists')
-  
-ggplot(happy_playlists, aes(x=tempo))+
-    scale_x_continuous()+
-    geom_histogram(fill='lightcoral', color='indianred2', binwidth = 30)+
-    facet_wrap(~playlist)+
-  theme_bw()+
-    ggtitle('The different happy playlists')
-  
-  ggplot(other_playlists, aes(x=tempo))+
-    scale_x_continuous()+
-    geom_histogram(fill='hotpink4', color='deeppink4', binwidth = 30)+
-    facet_wrap(~playlist)+
-  theme_bw()+
-    ggtitle('Other kinds of playlists')
-  ```
- 
-   ***
+***
 
 **Findings**
 
-When we compare 'happy' playslists to other kinds of playlists, we can't see big differences in the tempo (BPM) that is used per song. At a first glance it looks like there is a huge differenc in the distribution, but when you take a closer look, you can see that the 'happy' playlists dataset contains more songs and is like an 'extreme' version of the other kinds of playlists. The peaks around 75 and 125 are higher at the histogram of the 'happy' playlist, but the peaks are around the same tempo as in the histogram of the other kinds of playlists. So we can conclude that there doesn't seem to be a real difference in the tempo for these playlists. 
+When using random forest you need to determine what kind of features are most important in determining which playlist you hear. These features are duration, instrumentalness and the timbre components c02, c05, c09 and c11 for the 'happy' playlist. Based on these features I tried to make the computer perform better on determining which song belongs to which playlist. As you can see in the confusion matrix the difference isn't (mostly) not that big and the computer is still having a hard time predicting as you can see in the 'mosaic' and the 'heatmap'. 
 
-When we take a closer look at the different 'happy' playlists, we see the same kind of patterns with peaks around 75 and 125. When looking at the histograms of the other kinds of playlist, we see that 'life sucks' shows almost the same pattern as the first histogram that contains all 'happy' playlists. The only differences here are that the peak around 75 is higher than the one around 125 as is the case in the other histogram and that 'life sucks' contains less songs (obviously). There are more differences to see in the histogram of 'sad songs'. The pattern is a bit different, but the overall shape is almost the same as the other histograms. Were the others got a peak around 75 that is higher than the peak containing 150, this histogram shows the exact opposite, but the difference isn't that big, so it doesn't affect the ´overall´ histogram of the playlists. In conlusion, the tempo of a happy playlist isn't that different when comparing it to other kinds of playlists.
+Also, I made a plot that consists out of timbre component c11 (on the x-axis), timbre component c09 (on the y-axis) and the duration of the songs. It also shows which song belongs to which playlist. When looking at this plot there isn't a real clear pattern to see. So, I think we can conclude that there isn't a clear correlation between all these features. I don't think it is necessary to change my previous plots, because the improvement using these features is not that big and k-nearest neighbour also showed that it is already chance-based.
 
-(I don't know what the correct way of referring to the bars of the histogram is, so maybe you could help me with that.)
-    
+I tried the same procedure on the other playlists, but that gave me an even smaller difference. Namely (k-nearest neighbour):
 
-### What to find out for the coming weeks
+```{r}
+life_sucks<- get_playlist_audio_features('spotify', '37i9dQZF1DX3YSRoSdA634')%>% 
+    slice(1:20) %>% 
+    add_audio_analysis
 
-* Learn how to change the colors in the chromagrams of week 9.
+sad_songs<- get_playlist_audio_features('spotify','37i9dQZF1DX7qK8ma5wgG1')%>% 
+    slice(1:20) %>% 
+    add_audio_analysis
 
-* Incorporate ggplotly in my graphs from week 8 (and making different tabs to show all of the graphs)
+others <- 
+    life_sucks %>% mutate(playlist = "Life sucks") %>% 
+    bind_rows(
+        sad_songs %>% mutate(playlist = "Sad songs")) %>% 
+    mutate(playlist = factor(playlist)) %>% 
+    mutate(
+        segments = 
+            map2(segments, key, compmus_c_transpose)) %>% 
+    mutate(
+        pitches = 
+            map(segments, 
+                compmus_summarise, pitches, 
+                method = 'mean', norm = 'manhattan'),
+        timbre =
+            map(
+                segments,
+                compmus_summarise, timbre,
+                method = 'mean')) %>% 
+    mutate(pitches = map(pitches, compmus_normalise, 'clr')) %>% 
+    mutate_at(vars(pitches, timbre), map, bind_rows) %>% 
+    unnest(cols = c(pitches, timbre))
 
-*  Investigate the 'liveness' of happy songs according to the findings of week 7.
+others_class <- 
+    recipe(playlist ~
+               danceability +
+               energy +
+               loudness +
+               speechiness +
+               acousticness +
+               instrumentalness +
+               liveness +
+               valence +
+               tempo +
+               duration +
+               C + `C#|Db` + D + `D#|Eb` +
+               E + `F` + `F#|Gb` + G +
+               `G#|Ab` + A + `A#|Bb` + B +
+               c01 + c02 + c03 + c04 + c05 + c06 +
+               c07 + c08 + c09 + c10 + c11 + c12,
+           data = others) %>% 
+    step_center(all_predictors()) %>%
+    step_scale(all_predictors()) %>%
+    # step_range(all_predictors()) %>% 
+    prep(others) %>% 
+    juice
 
-* Look at the different (kind of) songs that are used in the 'Happy pop' and 'Happy hits' playlists to see if they overlap in some kind of way.
+others_cv <- others_class %>% vfold_cv(10)
+```
 
-* Make my dashboard more user friendly (e.g. adjusting the chart sizes and make several graphs on a tab more accesible).
+```{r}
+others_knn <- 
+    nearest_neighbor(mode = 'classification', neighbors = 1) %>% 
+    set_engine('kknn')
+predict_others_knn <- function(split)
+    fit(others_knn, playlist ~ ., data = analysis(split)) %>% 
+    predict(assessment(split), type = 'class') %>%
+    bind_cols(assessment(split))
 
-* Change the tab titles so that they tell a story
+others_cv %>% 
+    mutate(pred = map(splits, predict_others_knn)) %>% unnest(pred) %>% 
+    metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
+```
+And (feature selection using the same features as for the 'happy' playlists. That was determined by using random forests as well.):
 
-* Add findings for week 10
+```{r}
+predict_knn_reduced <- function(split)
+  fit(
+    others_knn, 
+    playlist ~ instrumentalness + duration + c11 + c05 + c09 + c02, 
+    data = analysis(split)) %>% 
+  predict(assessment(split), type = 'class') %>%
+  bind_cols(assessment(split))
+others_cv %>% 
+  mutate(pred = map(splits, predict_knn_reduced)) %>% unnest(pred) %>% 
+  metric_set(accuracy, kap, j_index)(truth = playlist, estimate = .pred_class)
+```    
+
+### What makes a 'happy' playlist 'happy'? (conclusion, week 13)
+
+**So what can we conclude? Who could benefit and how? What are the limitations of this research?**
+
+After all these weeks of doing research I found that the 'happy' playlists from my corpus have a higher energy level, valence level and have a higher liveness than the other playlist that I used in my corpus. I expected that there also is a difference in mode, since major is often linked to 'happy' when explaining what major and minor is to people with no musical training. Unfortunately I didn't find any difference in mode between 'happy' playlists and other playlists. I also expected that the tempo of 'happy' playlists is higher on average than the tempo of the other playlists, but also that doesn't seem true for this corpus. Another thing I tried take an outlier ('Sweet Caroline') from the plot of week 7 and compare it to a 'typical' 'happy' song ('Kiss somebody') according to this plot. When comparing these songs I looked especially at the chroma features and timbre features of Spotify's api's. It seemed that the plots that came out of these features aren't that well in presenting what we actually hear in the songs, so I couldn't see clear differences between these songs. 
+
+Maybe in another research someone could try to improve these features or could try to use some other songs to see if that shows some differences between an outlier and a 'typical' 'happy' song. They also could use 'typical' songs only to see if some characteristics of 'happy' songs appear. Something I didn't look into was the danceability of the playlists, this seems to me like an interesting feature, since I think 'happy' songs should be more danceable than other playlists. Also looking more in detail into the instrumentalness, duration and timbre components C02, C05, C09 and C11 might give more insight into what 'happy' means according to Spotify, since these components seemed the most important features when using random forests. 
+
+This research can be useful for psychologists (especially music therapists) and musicologists. Music therapists can use the outcome of this research to use certain music (that is 'happy' or not 'happy' at all) on patients who need 'happy' music or who don't need 'happy' music at all. They also might get a better insight into if 'happy' music is appropriate to use for which kind of disease or patient. Musicologists might want to use this research to support the statement that 'happy' music isn't always in major, as a lot of non-musicologists suggest. They also might use my chromagrams, keygrams and cepstrogram to support their own musical analysis or might make their own for this corpus to help themselves making a musical analysis. 
+
+What might have influenced my results is that the playlists changed every week, but not drastically so I decided to leave the change in there. Some songs that I discussed in this research aren't in the playlists anymore, so when you want to work with this corpus as well, you might get different results and probably get different outliers than I had in the plot of week 7. In week 9 I already found that 'Sweet Caroline' isn't in the playlists anymore, so I discuss an outlier that Spotify already took out, maybe because it is an outlier, but maybe it was accidentally (I think it is accidentally, since Sweet Caroline didn't seem so different at all when looking at other features than energy).
